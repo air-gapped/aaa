@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0](https://github.com/air-gapped/aaa/commits/v0.1.0) (unreleased)
+## [0.1.0](https://github.com/air-gapped/aaa/commits/v0.1.0) (2026-10-02)
 
 The first release. `aaa` ("triple A") writes down what you started, in one
 command, so an interruption does not make you forget it. Linux only, amd64 and
