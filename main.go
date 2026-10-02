@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type app struct {
@@ -52,6 +53,10 @@ const usage = `usage:
   aaa --skill                  print the agent skill (SKILL.md)
   --json                       JSON output, with any of the above except --skill`
 
+// maxTextRunes caps an item's text. Items are short notes; the cap keeps a
+// runaway paste or a misbehaving agent from flooding the list and the database.
+const maxTextRunes = 1000
+
 // usageError is reported with exit code 2.
 type usageError string
 
@@ -61,6 +66,18 @@ type command struct {
 	op        string // "", "--close", "--edit", "--show", "--skill", "--help", "--version"
 	all, json bool
 	words     []string
+}
+
+// text is the item text the command carries: all words for a capture, the
+// words after the hash for --edit, nothing otherwise.
+func (c command) text() string {
+	switch {
+	case c.op == "":
+		return strings.Join(c.words, " ")
+	case c.op == "--edit" && len(c.words) > 1:
+		return strings.Join(c.words[1:], " ")
+	}
+	return ""
 }
 
 // parse turns arguments into a command. Bare words are capture text;
@@ -102,6 +119,9 @@ func parse(args []string) (command, error) {
 		return c, usageError("--edit takes a hash and the new text")
 	case c.op == "" && n > 0 && strings.TrimSpace(strings.Join(c.words, "")) == "":
 		return c, usageError("empty text")
+	}
+	if text := c.text(); utf8.RuneCountInString(text) > maxTextRunes {
+		return c, usageError(fmt.Sprintf("text is longer than %d characters", maxTextRunes))
 	}
 	return c, nil
 }
@@ -152,7 +172,7 @@ func (a *app) run(args []string) int {
 		return a.print(it, "closed %s  %s\n", it.Hash, it.Text)
 
 	case c.op == "--edit":
-		it, err := s.edit(c.words[0], strings.Join(c.words[1:], " "))
+		it, err := s.edit(c.words[0], c.text())
 		if err != nil {
 			return a.fail(err)
 		}
@@ -183,7 +203,7 @@ func (a *app) run(args []string) int {
 
 	it := &item{
 		Hash:      newHash(s.hashTaken, a.rand),
-		Text:      strings.Join(c.words, " "),
+		Text:      c.text(),
 		State:     "open",
 		CreatedAt: a.now().UTC().Truncate(time.Second),
 		Cwd:       a.cwd,

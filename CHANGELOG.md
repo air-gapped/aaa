@@ -22,3 +22,8 @@ The first release.
 - `--close <hash>`, `--close --all`, `--edit <hash> <text>`, `--show <hash>`.
 - `--json` on every operation, for coding agents.
 - `--skill` prints the agent skill, so the binary is the only artifact.
+- Item text is limited to 1000 characters.
+
+### Security
+
+- Control characters in stored fields are printed as visible `\xNN` escapes, so a directory name carrying terminal escape sequences cannot drive the terminal when items are listed.

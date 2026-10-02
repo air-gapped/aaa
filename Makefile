@@ -11,7 +11,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 BIN_DIR ?= $(HOME)/.local/bin
 SKILL_DIR ?= $(HOME)/.claude/skills/aaa
 
-.PHONY: help ci fmt vet test vuln build install demo clean
+.PHONY: help ci fmt vet test vuln fuzz mutants build install demo clean
 
 ##@ 1 · Check (same steps as CI)
 ci: fmt vet test vuln ## Run every CI check locally
@@ -28,6 +28,17 @@ test: ## Run the tests
 
 vuln: ## Check dependencies and code for known vulnerabilities
 	govulncheck ./...
+
+FUZZTIME ?= 30s
+# gremlins v0.6.0 fails on Go 1.25+ (no "covdata" tool, gremlins issue 285); main has the fix.
+GREMLINS ?= github.com/go-gremlins/gremlins/cmd/gremlins@b48a4aad1
+
+fuzz: ## Fuzz the argument parser and the terminal sanitizer (FUZZTIME each)
+	go test -run '^$$' -fuzz '^FuzzParse$$' -fuzztime $(FUZZTIME) .
+	go test -run '^$$' -fuzz '^FuzzClean$$' -fuzztime $(FUZZTIME) .
+
+mutants: ## Mutation testing; survivors are untested behaviour
+	go run $(GREMLINS) unleash --timeout-coefficient 3 .
 
 ##@ 2 · Build and install
 build: ## Build the static binary ./aaa

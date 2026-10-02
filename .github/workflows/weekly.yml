@@ -23,5 +23,8 @@ jobs:
       - name: Vulnerabilities
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0 && govulncheck ./...
 
+      - name: Fuzz
+        run: make fuzz FUZZTIME=2m
+
       - name: Outdated dependencies
         run: go list -u -m all | grep -F '[' || echo "all dependencies current"

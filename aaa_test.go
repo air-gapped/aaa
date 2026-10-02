@@ -352,6 +352,9 @@ func TestPushAndPullAgainstRemote(t *testing.T) {
 	if push, pull := state(); push != 0.0 || pull != false {
 		t.Fatalf("in sync: push %v pull %v", push, pull)
 	}
+	if view, _, _ := ta.run(); strings.Contains(strings.Split(view, "\n")[1], " 0 ") {
+		t.Errorf("in-sync row shows a 0 under PUSH: %q", view)
+	}
 
 	git(t, mine, "commit", "-q", "--allow-empty", "-m", "two")
 	git(t, mine, "commit", "-q", "--allow-empty", "-m", "three")
@@ -504,5 +507,92 @@ func TestCleanEscapesC1AndInvalidUTF8(t *testing.T) {
 		if got := clean(in); got != want {
 			t.Errorf("clean(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestTextLengthIsLimited(t *testing.T) {
+	ta := newTestApp(t)
+	atLimit := strings.Repeat("ä", maxTextRunes) // counts characters, not bytes
+	if out, _, code := ta.run(atLimit); code != 0 || !strings.Contains(out, atLimit) {
+		t.Fatalf("text at the limit: code %d", code)
+	}
+	h := ta.capture("short")
+	for _, args := range [][]string{
+		{atLimit + "x"},
+		{"--edit", h, atLimit + "x"},
+		{"two", "words" + strings.Repeat("y", maxTextRunes)},
+	} {
+		_, errOut, code := ta.run(args...)
+		if code != 2 || !strings.Contains(errOut, "longer than 1000 characters") {
+			t.Errorf("%d-char args: code %d, stderr %q; want 2 and a length error", len([]rune(strings.Join(args, " "))), code, errOut[:min(len(errOut), 80)])
+		}
+	}
+	if view, _, _ := ta.run(); strings.Count(view, "\n") != 5 { // header, 2 items, blank, footer
+		t.Errorf("rejected input was stored:\n%s", view)
+	}
+}
+
+func TestJSONViewCountsOpenAndClosed(t *testing.T) {
+	ta := newTestApp(t)
+	ta.capture("one")
+	ta.capture("two")
+	ta.run("--close", ta.capture("three"))
+	var v struct {
+		Open   int `json:"open"`
+		Closed int `json:"closed"`
+	}
+	ta.runJSON(&v)
+	if v.Open != 2 || v.Closed != 1 {
+		t.Errorf("open %d closed %d, want 2 and 1", v.Open, v.Closed)
+	}
+}
+
+func TestLoneDashIsText(t *testing.T) {
+	out, _, code := newTestApp(t).run("fix", "-", "then", "ship")
+	if code != 0 || !strings.HasSuffix(strings.TrimSpace(out), "fix - then ship") {
+		t.Errorf("code %d, out %q", code, out)
+	}
+}
+
+func TestUsageTextOnlyOnUsageErrors(t *testing.T) {
+	ta := newTestApp(t)
+	if _, errOut, _ := ta.run("--bogus"); !strings.Contains(errOut, "usage:") {
+		t.Errorf("usage error without usage text: %q", errOut)
+	}
+	if _, errOut, _ := ta.run("--close", "zzz"); strings.Contains(errOut, "usage:") {
+		t.Errorf("unknown hash printed usage text: %q", errOut)
+	}
+}
+
+func TestPathsUnderHomeAreShortened(t *testing.T) {
+	ta := newTestApp(t)
+	home := t.TempDir()
+	ta.app.env["HOME"] = home
+	for cwd, want := range map[string]string{
+		home:                       "~",
+		filepath.Join(home, "src"): "~/src",
+		home + "2":                 home + "2", // a sibling with the same prefix is not under home
+	} {
+		ta.app.cwd = cwd
+		ta.capture("x")
+		view, _, _ := ta.run()
+		lines := strings.Split(strings.TrimSpace(view), "\n")
+		last := lines[len(lines)-3] // newest item, above blank line and footer
+		if !strings.HasSuffix(last, "  "+want) {
+			t.Errorf("cwd %q shown as %q, want suffix %q", cwd, last, want)
+		}
+	}
+}
+
+func TestColorOnlyAroundNonEmptyCells(t *testing.T) {
+	ta := newTestApp(t)
+	ta.app.color = true
+	h := ta.capture("x")
+	view, _, _ := ta.run()
+	if !strings.Contains(view, yellow+h) || !strings.Contains(view, dim+"  ID") {
+		t.Errorf("expected coloured id and header: %q", view)
+	}
+	if strings.Contains(view, cyan+reset) || strings.Contains(view, green+reset) {
+		t.Errorf("empty cells must not carry colour codes: %q", view)
 	}
 }

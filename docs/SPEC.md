@@ -44,6 +44,7 @@ Parsing rules:
 5. Only one operation flag per call (`--close`, `--edit`, `--show`, `--skill`, `--help`, `--version`). Two or more is a usage error.
 6. With no operation flag and no positionals: show the view. With positionals: capture.
 7. Empty capture text (for example `aaa ""`) is a usage error.
+8. Capture and `--edit` text longer than 1000 characters (counted as Unicode characters, not bytes) is a usage error. Items are short notes; the cap stops a runaway paste or a misbehaving agent from flooding the list.
 
 Hashes are matched case-insensitively.
 
@@ -220,6 +221,10 @@ One Go module, one `package main`, few files **(default)**:
 - View: open items from earlier days are included, closed items only from today; ordering; empty state.
 - Commits-since against a temp git repo: a normal count, a rebased SHA (blank), a deleted repo (blank).
 - Environment allowlist: listed names are captured; an unlisted secret such as `CLAUDE_CODE_MESSAGING_TOKEN` is not.
+- Terminal safety: control characters in stored fields (a directory name carrying OSC 52, C1 controls, invalid UTF-8) are printed as visible `\xNN`, never raw; JSON keeps the exact value.
+- Input limit: 1000 characters accepted, 1001 rejected, for capture and `--edit`.
+- Fuzz targets (`make fuzz`): the parser never accepts a flag-like word as text, an unknown operation, blank or over-long text; `clean()` output is valid UTF-8, has no control characters, is idempotent, and leaves safe text unchanged. Run weekly in CI.
+- Mutation testing (`make mutants`, gremlins): every surviving mutant is either killed by a new test or recorded as untestable. Baseline 2026-10-02: 99% test efficacy; the one survivor is the TTY check, which depends on the real terminal.
 
 ## 11. Out of scope for v1
 
