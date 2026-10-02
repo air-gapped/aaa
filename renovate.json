@@ -1,0 +1,20 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "minimumReleaseAge": "3 days",
+  "packageRules": [
+    {
+      "description": "Automerge minor/patch for stable Go modules after the cooldown",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchCurrentVersion": "!/^v?0/",
+      "automerge": true,
+      "semanticCommitType": "chore"
+    },
+    {
+      "description": "Never automerge GitHub Actions — require human review",
+      "matchManagers": ["github-actions"],
+      "automerge": false
+    }
+  ]
+}
