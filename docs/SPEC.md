@@ -116,7 +116,7 @@ Columns:
 | Column | Content |
 |---|---|
 | ID | the hash, yellow |
-| STARTED | clock time `HH:MM`, dimmed. Weekday and date (`Thu Sep 17`) are shown only when the item's day differs from the line above and is not today. Weekdays line up under weekdays; clock times line up in their own column. Never relative ("5m", "3d"). |
+| STARTED | clock time `HH:MM`, dimmed. Weekday and date (`Thu Sep 17`) are shown only when the item's day differs from the line above. Today follows the same rule, so its first line shows today's date: every bare time belongs to the dated line above it. Weekdays line up under weekdays; clock times line up in their own column. Never relative ("5m", "3d"). |
 | TEXT | the item text |
 | GIT | branch name only, cyan. The repo is not repeated: PATH shows it. |
 | PUSH | number of local commits not on the remote branch, green, right-aligned. Blank when 0. |
@@ -127,16 +127,14 @@ PUSH and PULL are computed live with `git ls-remote <remote> refs/heads/<branch>
 
 Commits since capture (`git rev-list --count <sha>..HEAD`) is not shown in the list. It stays in `--show` and in the JSON as `commits_since`.
 
-Open issue: a bare time means either "today" or "same day as the line above", so an old item can look as if it was started today.
-
 ```
 $ aaa
   ID   STARTED           TEXT                            GIT         PUSH  PULL  PATH
-  2em             09:14  update the README                                       ~/src/example-app
+  2em  Thu Oct 1  09:14  update the README                                       ~/src/example-app
   k4p  Thu Sep 17 10:41  look into the flaky login test  main               yes  ~/src/example-app/tests
   m7c             15:22  check why the build is slow                             ~
   x2m  Mon Sep 28 16:03  finish the config cleanup       main                    ~/src/example-lib
-  yv3             21:13  add retry to the upload job     feat/retry     2        ~/src/example-app/upload
+  yv3  Thu Oct 1  21:13  add retry to the upload job     feat/retry     2        ~/src/example-app/upload
 
   4 open, 1 done today
 ```
@@ -183,7 +181,7 @@ Item object (used by capture, `--close`, `--edit`, `--show`):
 }
 ```
 
-The view (`aaa --json`) prints `{"items": [...], "open": 3, "closed": 2}`. Each item adds `commits_since`, which is an integer, or `null` when it cannot be computed.
+The view (`aaa --json`) prints `{"items": [...], "open": 3, "closed": 2}`. Each item adds `commits_since` (integer, or `null` when it cannot be computed), `push` (integer, `null` when unknown) and `pull` (boolean, `null` when unknown), the same remote state as the PUSH and PULL columns.
 `--close --all --json` prints `{"closed": [<item>, ...]}`.
 
 ## 8. `--skill`
