@@ -30,7 +30,7 @@ func main() {
 		k, v, _ := strings.Cut(kv, "=")
 		env[k] = v
 	}
-	cwd, _ := os.Getwd()
+	cwd := workingDir(env)
 	fi, _ := os.Stdout.Stat()
 	color := fi != nil && fi.Mode()&os.ModeCharDevice != 0 && env["NO_COLOR"] == ""
 	a := &app{env: env, cwd: cwd, now: time.Now, color: color, stdout: os.Stdout, stderr: os.Stderr,
@@ -52,6 +52,16 @@ const usage = `usage:
   aaa --show <hash>            show one item in full
   aaa --skill                  print the agent skill (SKILL.md)
   --json                       JSON output, with any of the above except --skill`
+
+// workingDir is the directory aaa runs in. When the shell's directory has
+// been deleted, os.Getwd fails; the shell's $PWD still names where the user
+// was, so the item keeps its path (repo and branch stay empty).
+func workingDir(env map[string]string) string {
+	if dir, err := os.Getwd(); err == nil {
+		return dir
+	}
+	return env["PWD"]
+}
 
 // maxTextRunes caps an item's text. Items are short notes; the cap keeps a
 // runaway paste or a misbehaving agent from flooding the list and the database.

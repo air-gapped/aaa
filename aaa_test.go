@@ -596,3 +596,17 @@ func TestColorOnlyAroundNonEmptyCells(t *testing.T) {
 		t.Errorf("empty cells must not carry colour codes: %q", view)
 	}
 }
+
+func TestWorkingDirFallsBackToPWDWhenDeleted(t *testing.T) {
+	gone := filepath.Join(t.TempDir(), "gone")
+	if err := os.Mkdir(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(gone)
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	if got := workingDir(map[string]string{"PWD": gone}); got != gone {
+		t.Errorf("workingDir in a deleted directory = %q, want $PWD %q", got, gone)
+	}
+}

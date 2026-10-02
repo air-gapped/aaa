@@ -56,7 +56,7 @@ At capture time `aaa` stores the following. Every probe is best-effort: a failed
 |---|---|
 | `text` | the arguments |
 | `created_at` | current time, stored UTC, RFC 3339 |
-| `cwd` | working directory |
+| `cwd` | working directory; when it has been deleted, the shell's `$PWD` |
 | `repo` | `git rev-parse --show-toplevel` |
 | `branch` | `git rev-parse --abbrev-ref HEAD` (`HEAD` when detached) |
 | `sha` | `git rev-parse HEAD` |
