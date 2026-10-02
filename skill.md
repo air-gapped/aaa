@@ -22,11 +22,11 @@ Always pass `--json` and parse the JSON. Never parse the table output.
 
 Every word that is not a flag is capture text. Quotes are optional. A word that starts with `-` and is not a known flag is an error (exit 2), so rephrase text that starts with a dash.
 
-## Hashes and positions
+## Hashes
 
 Each item has a 3-character hash, for example `k7f`. Commands take hashes only.
 
-The user sees a position number (1, 2, 3 …) in front of each item and may say "close one, two and four". Positions are not accepted by `aaa`. Map them to hashes from the `position` field of the most recent `aaa --json` listing, then run one `aaa --close <hash> --json` per item. If you have no recent listing, run `aaa --json` first.
+When the user describes an item instead of giving its hash ("close the README one"), match the description against the `text` of the items in the most recent `aaa --json` listing, then run one `aaa --close <hash> --json` per item. If the match is not clear, or several items fit, ask. If you have no recent listing, run `aaa --json` first.
 
 ## Rules
 

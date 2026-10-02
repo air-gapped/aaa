@@ -19,6 +19,7 @@ type app struct {
 	now            func() time.Time
 	rand           *rand.Rand
 	json           bool // set per run from --json
+	color          bool // ANSI colours on a terminal
 	stdout, stderr io.Writer
 }
 
@@ -29,7 +30,9 @@ func main() {
 		env[k] = v
 	}
 	cwd, _ := os.Getwd()
-	a := &app{env: env, cwd: cwd, now: time.Now, stdout: os.Stdout, stderr: os.Stderr,
+	fi, _ := os.Stdout.Stat()
+	color := fi != nil && fi.Mode()&os.ModeCharDevice != 0 && env["NO_COLOR"] == ""
+	a := &app{env: env, cwd: cwd, now: time.Now, color: color, stdout: os.Stdout, stderr: os.Stderr,
 		rand: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))}
 	os.Exit(a.run(os.Args[1:]))
 }
@@ -91,6 +94,8 @@ func parse(args []string) (command, error) {
 		return c, usageError("--all only works with --close")
 	case c.op == "--close" && c.all && n != 0, c.op == "--close" && !c.all && n != 1:
 		return c, usageError("--close takes one hash, or --all")
+	case c.json && (c.op == "--skill" || c.op == "--help" || c.op == "--version"):
+		return c, usageError("--json does not combine with " + c.op)
 	case c.op == "--show" && n != 1:
 		return c, usageError("--show takes one hash")
 	case c.op == "--edit" && (n < 2 || strings.TrimSpace(strings.Join(c.words[1:], "")) == ""):

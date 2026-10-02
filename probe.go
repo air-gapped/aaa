@@ -13,10 +13,16 @@ import (
 // probe runs a command in dir with a 1-second timeout. Probes are
 // best-effort: a failure only means the field stays empty.
 func probe(dir, name string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	return probeWithin(time.Second, dir, name, args...)
+}
+
+func probeWithin(timeout time.Duration, dir, name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
+	// A login prompt must fail, not hang the list.
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -o BatchMode=yes")
 	out, err := cmd.Output()
 	return strings.TrimSpace(string(out)), err
 }
@@ -119,4 +125,36 @@ func herdrLabel(dir, list, idField, id string, args ...string) string {
 		}
 	}
 	return ""
+}
+
+// remoteState compares branch with its upstream on the server. It asks the
+// server only for the branch's commit ID (git ls-remote), so nothing is
+// downloaded. push counts local commits the server lacks; pull is true when
+// the server has a commit we lack. Both are nil when there is no upstream
+// or the server cannot be reached.
+func remoteState(repo, branch string) (push *int, pull *bool) {
+	upstream := output(repo, "git", "rev-parse", "--abbrev-ref", branch+"@{upstream}")
+	name, remoteBranch, ok := strings.Cut(upstream, "/")
+	if !ok {
+		return nil, nil
+	}
+	ls, err := probeWithin(5*time.Second, repo, "git", "ls-remote", name, "refs/heads/"+remoteBranch)
+	remoteSHA, _, _ := strings.Cut(ls, "\t")
+	if err != nil || remoteSHA == "" {
+		return nil, nil
+	}
+	base := remoteSHA // what the server has, when we know that commit locally
+	if _, err := probe(repo, "git", "cat-file", "-e", remoteSHA+"^{commit}"); err != nil {
+		base = upstream // unknown commit: the server moved; count against our last fetch
+		yes := true
+		pull = &yes
+	} else {
+		_, err := probe(repo, "git", "merge-base", "--is-ancestor", remoteSHA, branch)
+		behind := err != nil
+		pull = &behind
+	}
+	if n, err := strconv.Atoi(output(repo, "git", "rev-list", "--count", base+".."+branch)); err == nil {
+		push = &n
+	}
+	return push, pull
 }

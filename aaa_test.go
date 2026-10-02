@@ -54,10 +54,10 @@ func TestCapturedItemAppearsInView(t *testing.T) {
 	hash := strings.Fields(out)[0]
 
 	view, _, _ := ta.run()
-	if !strings.Contains(view, hash+"  ○ update the readme file") {
+	if !strings.Contains(view, "  "+hash+"  Thu Oct 1  09:14  update the readme file") {
 		t.Errorf("view missing item %s:\n%s", hash, view)
 	}
-	if !strings.Contains(view, "1 open, 0 closed") {
+	if !strings.Contains(view, "ID   STARTED           TEXT") || !strings.Contains(view, "1 open, 0 done today") {
 		t.Errorf("view missing footer:\n%s", view)
 	}
 }
@@ -81,7 +81,7 @@ func TestCloseMarksItemDoneInView(t *testing.T) {
 		t.Fatalf("close: code %d, out %q", code, out)
 	}
 	view, _, _ := ta.run()
-	if !strings.Contains(view, h+"  ✓ update the README") || !strings.Contains(view, "0 open, 1 closed") {
+	if !strings.Contains(view, h+"  Thu Oct 1  09:14  update the README") || !strings.Contains(view, "0 open, 1 done today") {
 		t.Errorf("view after close:\n%s", view)
 	}
 }
@@ -154,7 +154,7 @@ func TestEditReplacesText(t *testing.T) {
 	if code != 0 || strings.TrimSpace(out) != h+"  look into the flaky login test" {
 		t.Fatalf("edit: code %d, out %q", code, out)
 	}
-	if view, _, _ := ta.run(); !strings.Contains(view, "○ look into the flaky login test") {
+	if view, _, _ := ta.run(); !strings.Contains(view, "09:14  look into the flaky login test") {
 		t.Errorf("view after edit:\n%s", view)
 	}
 	if _, errOut, code := ta.run("--edit", "zzz", "x"); code != 1 || !strings.Contains(errOut, "no item zzz") {
@@ -202,7 +202,8 @@ func TestJSONEverywhere(t *testing.T) {
 
 	var view struct {
 		Items []struct {
-			Position     int    `json:"position"`
+			Position     *int   `json:"position"`
+			Push         *int   `json:"push"`
 			Hash         string `json:"hash"`
 			CommitsSince *int   `json:"commits_since"`
 		} `json:"items"`
@@ -210,8 +211,8 @@ func TestJSONEverywhere(t *testing.T) {
 		Closed int `json:"closed"`
 	}
 	ta.runJSON(&view)
-	if view.Open != 2 || len(view.Items) != 2 || view.Items[0].Position != 1 || view.Items[0].Hash != h ||
-		view.Items[1].Position != 2 || view.Items[0].CommitsSince != nil {
+	if view.Open != 2 || len(view.Items) != 2 || view.Items[0].Position != nil || view.Items[0].Hash != h ||
+		view.Items[0].CommitsSince != nil || view.Items[0].Push != nil {
 		t.Errorf("view JSON: %+v", view)
 	}
 
@@ -259,22 +260,24 @@ func TestViewShowsAllOpenButOnlyTodaysClosed(t *testing.T) {
 	view, _, _ := ta.run()
 	lines := strings.Split(strings.TrimRight(view, "\n"), "\n")
 	want := []string{
-		"  1  " + closedToday + "  ✓ closed today",
-		"  2  " + oldOpen + "  ○ old open",
-		"  3  ",
+		"  ID   STARTED           TEXT",
+		"  " + closedToday + "  Wed Sep 30 08:00  closed today",
+		"  " + oldOpen + "  Mon Sep 28 10:00  old open",
+		"  ",
 	}
-	if len(lines) != 5 {
-		t.Fatalf("want 3 items + blank + footer, got:\n%s", view)
+	if len(lines) != 6 {
+		t.Fatalf("want header + 3 items + blank + footer, got:\n%s", view)
 	}
 	for i, w := range want {
 		if !strings.HasPrefix(lines[i], w) {
 			t.Errorf("line %d = %q, want prefix %q", i+1, lines[i], w)
 		}
 	}
-	if !strings.Contains(lines[1], "2026-09-28") || !strings.HasSuffix(lines[2], "09:00") {
-		t.Errorf("time column: %q / %q", lines[1], lines[2])
+	// same day as the line above: date left out; a new day gets its date
+	if !strings.Contains(lines[3], "Wed Sep 30 09:00  new open") {
+		t.Errorf("new day must show its date: %q", lines[3])
 	}
-	if strings.Contains(view, "old closed") || lines[4] != "2 open, 1 closed" {
+	if strings.Contains(view, "old closed") || lines[5] != "  2 open, 1 done today" {
 		t.Errorf("view:\n%s", view)
 	}
 }
@@ -289,6 +292,19 @@ func git(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// viewEntry returns the first item of the JSON view.
+func (ta *testApp) firstEntry() map[string]any {
+	ta.t.Helper()
+	var v struct {
+		Items []map[string]any `json:"items"`
+	}
+	ta.runJSON(&v)
+	if len(v.Items) == 0 {
+		ta.t.Fatal("empty view")
+	}
+	return v.Items[0]
+}
+
 func TestGitContextAndCommitsSince(t *testing.T) {
 	ta := newTestApp(t)
 	repo := filepath.Join(t.TempDir(), "example-app")
@@ -298,29 +314,79 @@ func TestGitContextAndCommitsSince(t *testing.T) {
 	ta.app.cwd = repo
 	h := ta.capture("retry logic")
 
-	line := func() string {
-		view, _, _ := ta.run()
-		return strings.Split(view, "\n")[0]
+	if view, _, _ := ta.run(); !strings.Contains(view, "retry logic  feat/retry") || strings.Contains(view, "since") {
+		t.Fatalf("view shows branch only, no commits-since:\n%s", view)
 	}
-	if l := line(); !strings.Contains(l, "example-app  feat/retry") || !strings.HasSuffix(l, "0 commits since") {
-		t.Fatalf("fresh capture: %q", l)
+	since := func() any { return ta.firstEntry()["commits_since"] }
+	if n := since(); n != 0.0 {
+		t.Fatalf("fresh capture: commits_since = %v", n)
 	}
-
 	git(t, repo, "commit", "-q", "--allow-empty", "-m", "two")
 	git(t, repo, "commit", "-q", "--allow-empty", "-m", "three")
-	if l := line(); !strings.HasSuffix(l, "2 commits since") {
-		t.Errorf("after 2 commits: %q", l)
+	if n := since(); n != 2.0 {
+		t.Errorf("after 2 commits: %v", n)
 	}
-
 	git(t, repo, "reset", "-q", "--hard", "HEAD~2")
 	git(t, repo, "commit", "-q", "--amend", "--allow-empty", "-m", "rewritten")
-	if l := line(); strings.Contains(l, "since") {
-		t.Errorf("rewritten history should show no count: %q", l)
+	if n := since(); n != nil {
+		t.Errorf("rewritten history: %v, want null", n)
+	}
+	os.RemoveAll(repo)
+	if e := ta.firstEntry(); e["commits_since"] != nil || e["hash"] != h {
+		t.Errorf("deleted repo: %v", e)
+	}
+}
+
+func TestPushAndPullAgainstRemote(t *testing.T) {
+	ta := newTestApp(t)
+	dir := t.TempDir()
+	remote, mine, theirs := filepath.Join(dir, "remote.git"), filepath.Join(dir, "mine"), filepath.Join(dir, "theirs")
+	git(t, dir, "init", "-q", "--bare", "-b", "main", remote)
+	git(t, dir, "clone", "-q", remote, mine)
+	git(t, mine, "commit", "-q", "--allow-empty", "-m", "one")
+	git(t, mine, "push", "-q", "origin", "main")
+	ta.app.cwd = mine
+	ta.capture("sync test")
+
+	state := func() (any, any) { e := ta.firstEntry(); return e["push"], e["pull"] }
+	if push, pull := state(); push != 0.0 || pull != false {
+		t.Fatalf("in sync: push %v pull %v", push, pull)
 	}
 
-	os.RemoveAll(repo)
-	if l := line(); strings.Contains(l, "since") || !strings.Contains(l, h) {
-		t.Errorf("deleted repo should show no count: %q", l)
+	git(t, mine, "commit", "-q", "--allow-empty", "-m", "two")
+	git(t, mine, "commit", "-q", "--allow-empty", "-m", "three")
+	if push, pull := state(); push != 2.0 || pull != false {
+		t.Errorf("2 unpushed: push %v pull %v", push, pull)
+	}
+	if view, _, _ := ta.run(); !strings.Contains(view, "main     2") {
+		t.Errorf("PUSH column:\n%s", view)
+	}
+
+	git(t, dir, "clone", "-q", remote, theirs)
+	git(t, theirs, "commit", "-q", "--allow-empty", "-m", "theirs")
+	git(t, theirs, "push", "-q", "origin", "main")
+	if _, pull := state(); pull != true {
+		t.Errorf("remote moved: pull %v, want true", pull)
+	}
+	if view, _, _ := ta.run(); !strings.Contains(view, "yes") {
+		t.Errorf("PULL column:\n%s", view)
+	}
+}
+
+func TestQuotesAreOptional(t *testing.T) {
+	ta := newTestApp(t)
+	a := ta.capture("update the readme")
+	b := ta.capture("update", "the", "readme")
+	out, _, _ := ta.run("--show", a)
+	out2, _, _ := ta.run("--show", b)
+	if !strings.Contains(out, "text: update the readme\n") || !strings.Contains(out2, "text: update the readme\n") {
+		t.Errorf("quoted and unquoted differ:\n%s\n%s", out, out2)
+	}
+}
+
+func TestSkillRejectsJSON(t *testing.T) {
+	if _, _, code := newTestApp(t).run("--skill", "--json"); code != 2 {
+		t.Errorf("--skill --json: code %d, want 2", code)
 	}
 }
 

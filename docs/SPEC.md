@@ -33,7 +33,7 @@ There are no subcommands and no reserved words. Bare words are capture text. Ope
 | `aaa --help`, `-h` | Print usage. |
 | `aaa --version` | Print the version. |
 
-`--json` combines with every row above, except `--skill`, `--help` and `--version`, and changes the output to JSON (§7).
+`--json` combines with every row above, except `--skill`, `--help` and `--version`, and changes the output to JSON (§7). Combining it with those three is a usage error (exit 2).
 
 Parsing rules:
 
