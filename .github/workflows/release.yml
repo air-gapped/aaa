@@ -91,11 +91,11 @@ jobs:
           go-version-file: go.mod
 
       # arm64 test and smoke binaries run under qemu: GitHub's arm64 runners
-      # are not free for private repositories. qemu-user-static registers
+      # are not free for private repositories. qemu-user-binfmt registers
       # binfmt_misc, so the kernel runs arm64 executables transparently.
       - name: Install qemu for arm64
         if: matrix.arch == 'arm64'
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-binfmt
 
       - name: Test
         run: go test ./...
