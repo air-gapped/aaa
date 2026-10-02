@@ -205,6 +205,11 @@ func (a *app) print(v any, format string, args ...any) int {
 		fmt.Fprintln(a.stdout)
 		return 0
 	}
+	for i, v := range args {
+		if s, ok := v.(string); ok {
+			args[i] = clean(s)
+		}
+	}
 	fmt.Fprintf(a.stdout, format, args...)
 	return 0
 }
@@ -219,7 +224,7 @@ func (a *app) fail(err error) int {
 		fmt.Fprintln(a.stderr)
 		return code
 	}
-	fmt.Fprintf(a.stderr, "aaa: %v\n", err)
+	fmt.Fprintf(a.stderr, "aaa: %s\n", clean(err.Error()))
 	if code == 2 {
 		fmt.Fprintln(a.stderr, usage)
 	}

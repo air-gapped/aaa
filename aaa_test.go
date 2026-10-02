@@ -462,3 +462,47 @@ func TestSkillPrintsSkillFile(t *testing.T) {
 		}
 	}
 }
+
+func TestControlCharsAreEscapedInTextOutput(t *testing.T) {
+	ta := newTestApp(t)
+	// A directory name carrying an OSC 52 clipboard write, as a hostile
+	// archive or foreign repo could contain.
+	dir := filepath.Join(t.TempDir(), "evil\x1b]52;c;cHduZWQ=\x07dir")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ta.app.cwd = dir
+	capOut, _, _ := ta.run("note\x1b[2J")
+	h := strings.Fields(capOut)[0]
+	view, _, _ := ta.run()
+	show, _, _ := ta.run("--show", h)
+	_, errOut, _ := ta.run("--close", "\x1b]0;x\x07")
+	for name, out := range map[string]string{"capture": capOut, "view": view, "show": show, "error": errOut} {
+		if strings.ContainsAny(out, "\x1b\x07") {
+			t.Errorf("%s printed raw control characters: %q", name, out)
+		}
+	}
+	if !strings.Contains(view, `evil\x1b]52;c;cHduZWQ=\x07dir`) || !strings.Contains(show, `evil\x1b]52;c;cHduZWQ=\x07dir`) {
+		t.Errorf("escaped path missing:\n%s\n%s", view, show)
+	}
+
+	// JSON keeps the exact stored value; the encoder escapes it.
+	var it map[string]any
+	ta.runJSON(&it, "--show", h)
+	if it["cwd"] != dir {
+		t.Errorf("JSON cwd = %q, want the raw path", it["cwd"])
+	}
+}
+
+func TestCleanEscapesC1AndInvalidUTF8(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain ünïcode �": "plain ünïcode �", // valid text, including a real U+FFFD, is untouched
+		"a\u009bb":        `a\x9bb`,          // C1 CSI as UTF-8
+		"a\x9bb":          `a\x9bb`,          // raw 8-bit CSI byte (invalid UTF-8)
+		"tab\there":       `tab\x09here`,
+	} {
+		if got := clean(in); got != want {
+			t.Errorf("clean(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

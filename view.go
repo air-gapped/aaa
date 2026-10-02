@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // viewItems returns every open item plus the items closed today:
@@ -74,7 +76,7 @@ func (a *app) renderView(w io.Writer, items []*item) {
 	rs := remotes(items)
 	tw, gw := len("TEXT"), len("GIT")
 	for _, it := range items {
-		tw, gw = max(tw, len([]rune(it.Text))), max(gw, len(it.Branch))
+		tw, gw = max(tw, len([]rune(clean(it.Text)))), max(gw, len([]rune(clean(it.Branch))))
 	}
 	pad := func(s string, n int) string { return s + strings.Repeat(" ", max(0, n-len([]rune(s)))) }
 
@@ -96,19 +98,41 @@ func (a *app) renderView(w io.Writer, items []*item) {
 		if r := rs[it]; r.pull != nil && *r.pull {
 			pull = "yes"
 		}
-		path := tilde(it.Cwd, a.env["HOME"])
+		text, branch, path := clean(it.Text), clean(it.Branch), clean(tilde(it.Cwd, a.env["HOME"]))
 		if it.State == "closed" {
 			fmt.Fprintln(w, c(dim, strings.TrimRight(fmt.Sprintf("  %-3s  %-10s %5s  %s  %s  %4s  %4s  %s",
-				it.Hash, shown, t.Format("15:04"), pad(it.Text, tw), pad(it.Branch, gw), "", "", path), " ")))
+				it.Hash, shown, t.Format("15:04"), pad(text, tw), pad(branch, gw), "", "", path), " ")))
 			continue
 		}
 		open++
 		fmt.Fprintln(w, strings.TrimRight(fmt.Sprintf("  %s  %-10s %s  %s  %s  %s  %s  %s",
-			c(yellow, fmt.Sprintf("%-3s", it.Hash)), shown, c(dim, t.Format("15:04")), pad(it.Text, tw),
-			c(cyan, pad(it.Branch, gw)), c(green, fmt.Sprintf("%4s", push)), c(red, fmt.Sprintf("%4s", pull)),
+			c(yellow, fmt.Sprintf("%-3s", it.Hash)), shown, c(dim, t.Format("15:04")), pad(text, tw),
+			c(cyan, pad(branch, gw)), c(green, fmt.Sprintf("%4s", push)), c(red, fmt.Sprintf("%4s", pull)),
 			c(dim, path)), " "))
 	}
 	fmt.Fprintf(w, "\n%s\n", c(dim, fmt.Sprintf("  %d open, %d done today", open, len(items)-open)))
+}
+
+// clean makes a stored string safe to print on a terminal: control
+// characters (C0, DEL, C1, including ESC) and invalid UTF-8 bytes are written
+// as visible \xNN escapes, so a hostile directory name cannot drive the
+// terminal. JSON output does not need this; the encoder escapes.
+func clean(s string) string {
+	if utf8.ValidString(s) && !strings.ContainsFunc(s, unicode.IsControl) {
+		return s
+	}
+	var b strings.Builder
+	for i, r := range s {
+		switch {
+		case r == utf8.RuneError && !strings.HasPrefix(s[i:], "\uFFFD"):
+			fmt.Fprintf(&b, `\x%02x`, s[i])
+		case unicode.IsControl(r):
+			fmt.Fprintf(&b, `\x%02x`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // tilde shortens home to ~ in path.
@@ -132,10 +156,10 @@ func showItem(w io.Writer, it *item) {
 		{"tmux", it.Tmux}, {"tty", it.TTY},
 		{"herdr_workspace", it.HerdrWorkspace}, {"herdr_tab", it.HerdrTab},
 	} {
-		fmt.Fprintf(w, "%s: %s\n", f[0], f[1])
+		fmt.Fprintf(w, "%s: %s\n", f[0], clean(f[1]))
 	}
 	for _, k := range slices.Sorted(maps.Keys(it.Env)) {
-		fmt.Fprintf(w, "env.%s: %s\n", k, it.Env[k])
+		fmt.Fprintf(w, "env.%s: %s\n", k, clean(it.Env[k]))
 	}
 }
 
