@@ -168,4 +168,10 @@ jobs:
               "$previous" "$TAG" "$GITHUB_REPOSITORY" "$previous" "$TAG" >> notes.md
           fi
           ls -l dist
-          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
+          # Annotated, not the lightweight tag `gh release create --target`
+          # makes: plain `git describe` skips lightweight tags.
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898233+github-actions[bot]@users.noreply.github.com" \
+            tag -a "$TAG" -m "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+          gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-file notes.md

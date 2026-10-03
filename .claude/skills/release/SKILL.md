@@ -120,7 +120,9 @@ Rules:
 
 - Go has no version file. **The tag is the version**: the release workflow
   stamps it into the binary with `-X main.version=<tag>`; local builds stamp
-  `git describe` (`make build`).
+  `git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*'` (`make build`), so a
+  build at a release commit prints the same `vX.Y.Z`. `--tags` covers v0.1.0,
+  which is a lightweight tag; releases after it get annotated tags.
 - Tags are `vX.Y.Z`. A tag is public the moment the workflow pushes it; never
   push one speculatively, and never move one.
 
@@ -129,6 +131,10 @@ Rules:
 - **A test, build or smoke test fails in the release run:** nothing is
   public; the tag is created only after both targets pass. Fix on main, push,
   run the release again.
+- **The tag was pushed but `gh release create` failed:** the plan job now
+  refuses that tag, so do not rerun. Download the run's packages and finish
+  by hand: `gh release create vX.Y.Z dist/* --verify-tag --title vX.Y.Z
+  --notes-file <that version's CHANGELOG section saved to a file>`.
 - **The release was created but is broken:** turn it back into a draft
   (`gh release edit vX.Y.Z --draft`), fix on main, and release the next patch
   version. A published tag is never reused or moved.
